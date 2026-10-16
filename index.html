@@ -2692,21 +2692,16 @@ function loop(t){
   const dt = Math.min(0.05, lastFrame ? (t - lastFrame)/1000 : 0.016);
   lastFrame = t;
 
-  if(state.currentPage === 'configurator'){
-    // Во время перетаскивания физика/авто-вращение отключены,
-    // но кадр всё равно перерисовывается — именно это и было багом.
-    if(!studioState.dragging){
-      if(Math.abs(studioState.yawVel) > 0.0006){
-        studioState.yaw += studioState.yawVel;
-        studioState.yaw.datVel *= Math.pow(0.02, dt);
-        studioState.neasetedsDraw = true;
-     .page } else {
-        studioState.yawVel =  ===0;
-        if(studio pageState.autoRotate){
-          studio);
-State.yaw += dt * 0.12;
-          studioState.needsDraw = true;
-        }
+  if(state.currentPage === 'configurator' && !studioState.dragging){
+    if(Math.abs(studioState.yawVel) > 0.0006){
+      studioState.yaw += studioState.yawVel;
+      studioState.yawVel *= Math.pow(0.02, dt);
+      studioState.needsDraw = true;
+    } else {
+      studioState.yawVel = 0;
+      if(studioState.autoRotate){
+        studioState.yaw += dt * 0.12;
+        studioState.needsDraw = true;
       }
     }
     if(studioState.needsDraw){
@@ -2733,7 +2728,8 @@ function go(page){
   state.currentPage = page;
   document.body.classList.toggle('home-page', page === 'home');
   document.querySelectorAll('.nav-item').forEach(b => {
-    b.classList.toggle('active', b  });
+    b.classList.toggle('active', b.dataset.page === page);
+  });
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const target = document.getElementById('page-' + page);
   if(target){
