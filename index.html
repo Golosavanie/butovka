@@ -2633,20 +2633,24 @@ function initStudioControls(){
   let lastX = 0, lastY = 0;
   let lastT = 0;
   let velocity = 0;
+  let activePointerId = null;
 
   studio.setAttribute('tabindex', '0');
   studio.addEventListener('pointerdown', e => {
+    if(e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
     dragging = true;
     studioState.dragging = true;
     studioState.autoRotate = false;
     lastX = e.clientX; lastY = e.clientY;
     lastT = performance.now();
     velocity = 0; studioState.yawVel = 0;
+    activePointerId = e.pointerId;
     try { studio.setPointerCapture(e.pointerId); } catch(err){}
     e.preventDefault();
   });
   studio.addEventListener('pointermove', e => {
     if(!dragging) return;
+    if(activePointerId !== null && e.pointerId !== activePointerId) return;
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     const now = performance.now();
@@ -2656,22 +2660,36 @@ function initStudioControls(){
     studioState.pitch = clamp(studioState.pitch + dy * 0.0042, -0.04, 0.94);
     velocity = (dx * 0.011) / (dt/16.67);
     studioState.needsDraw = true;
+    /* Рисуем сразу же — не ждём окончания drag */
+    drawStudio();
+    studioState.needsDraw = false;
   });
   function endDrag(e){
     if(!dragging) return;
     dragging = false;
     studioState.dragging = false;
     studioState.yawVel = clamp(velocity, -0.16, 0.16);
+    activePointerId = null;
     try { studio.releasePointerCapture(e.pointerId); } catch(err){}
+    studioState.needsDraw = true;
   }
   studio.addEventListener('pointerup', endDrag);
   studio.addEventListener('pointercancel', endDrag);
-  studio.addEventListener('lostpointercapture', () => { dragging = false; studioState.dragging = false; });
+  studio.addEventListener('lostpointercapture', e => {
+    if(!dragging) return;
+    dragging = false;
+    studioState.dragging = false;
+    studioState.yawVel = clamp(velocity, -0.16, 0.16);
+    activePointerId = null;
+    studioState.needsDraw = true;
+  });
   studio.addEventListener('wheel', e => {
     e.preventDefault();
     studioState.autoRotate = false;
     studioState.zoom = clamp(studioState.zoom + e.deltaY * 0.0009, 0.72, 1.7);
     studioState.needsDraw = true;
+    drawStudio();
+    studioState.needsDraw = false;
   }, {passive:false});
   studio.addEventListener('keydown', e => {
     const step = 0.14;
@@ -2692,18 +2710,22 @@ function loop(t){
   const dt = Math.min(0.05, lastFrame ? (t - lastFrame)/1000 : 0.016);
   lastFrame = t;
 
-  if(state.currentPage === 'configurator' && !studioState.dragging){
-    if(Math.abs(studioState.yawVel) > 0.0006){
-      studioState.yaw += studioState.yawVel;
-      studioState.yawVel *= Math.pow(0.02, dt);
-      studioState.needsDraw = true;
-    } else {
-      studioState.yawVel = 0;
-      if(studioState.autoRotate){
-        studioState.yaw += dt * 0.12;
+  if(state.currentPage === 'configurator'){
+    /* ИнЕРЦИЯ и автоповорот работают только когда пользователь НЕ держит модель */
+    if(!studioState.dragging){
+      if(Math.abs(studioState.yawVel) > 0.0006){
+        studioState.yaw += studioState.yawVel;
+        studioState.yawVel *= Math.pow(0.02, dt);
         studioState.needsDraw = true;
+      } else {
+        studioState.yawVel = 0;
+        if(studioState.autoRotate){
+          studioState.yaw += dt * 0.12;
+          studioState.needsDraw = true;
+        }
       }
     }
+    /* Перерисовка НЕ блокируется во время drag — это и был баг «зависшей» бутовки */
     if(studioState.needsDraw){
       drawStudio();
       studioState.needsDraw = false;
@@ -2741,6 +2763,7 @@ function go(page){
       if(page === 'configurator'){
         studioState.needsDraw = true;
         drawStudio();
+        studioState.needsDraw = false;
       }
     });
   }
